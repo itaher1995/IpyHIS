@@ -16,7 +16,6 @@ import os
 import numpy as np
 import shapely
 from shapely.geometry import shape
-import geopandas as gpd
 import re
 import time
 from multiprocessing import Pool
@@ -29,6 +28,7 @@ class Map:
     '''
     def __init__(self):
         self.map=ipyl.Map(center = [54.5260,-105.2551],zoom=3)
+
     def showMap(self):
         '''
         Displays a ipython leaflet map that has several built-in functionality.
@@ -47,6 +47,13 @@ class Map:
         #referenced in the functions below.
         mappy=self.map
         dc=ipyl.DrawControl()
+        
+        global geoJSONDic #global dictionary for state geojsons
+        geoJSONDic={}
+        global hucGlobalDic #global dictionary for huc region geojsons
+        hucGlobalDic={}
+        global huc12GlobalDic #global dictionary for huc-12 region geojsons
+        huc12GlobalDic={}
         
         #helper functions
         def BOUNDCREATION(self):
@@ -77,13 +84,15 @@ class Map:
                     min_lon=round(coord[0],1)
             print('max lat: {0}, max lon: {1}, min lat: {2}, min lon: {3}'.format(max_lat,max_lon,min_lat,min_lon))    
             print('The values for the edges of the bounding box are stored in max_lat, min_lat, max_lon, min_lon')
+        
         def SAVEBOX(self,action,geo_json):
             '''Displays an ipython widget button that will call bound creation
             to save the custom polygon created.'''
             button=widgets.Button(description='Save Polygon')
             display(button)
             button.on_click(BOUNDCREATION)
-        def stateInfo(event,properties,id):
+        
+        def GRABSTATEBOUNDS(event,properties,id):
             '''Grabs state bounding box.'''
             getState=id[-2:]+'.geo.json'
             with open('IPyHIS/US-STATES/{0}'.format(getState)) as f:
@@ -105,7 +114,8 @@ class Map:
                 min_lon=min(lon)
                 min_lat=min(lat)
                 print('max lat: {0}, max lon: {1}, min lat: {2}, min lon: {3}'.format(max_lat,max_lon,min_lat,min_lon))
-        def hucZoom(event,properties,id):
+        
+        def HUCZOOM(event,properties,id):
             '''
             Zooms in on a specified huc region, removes all the hucs and replaces 
             them with huc-12s in that region
@@ -134,7 +144,8 @@ class Map:
                         mappy.add_layer(huc12GeoJson)
                     except:
                         pass
-        def displayRegions(event,properties):
+        
+        def DISPLAYREGIONS(event,properties):
             '''
             A helper function that runs at the end of a move. Checks what the 
             zoom level is and either removes the original huc regions or adds them.
@@ -147,61 +158,90 @@ class Map:
             else:
                 for huc in hucGlobalDic:
                     if hucGlobalDic[huc] not in mappy.layers:
-                        hucGlobalDic[huc].on_click(hucZoom)
+                        hucGlobalDic[huc].on_click(HUCZOOM)
                         mappy.add_layer(hucGlobalDic[huc])
                 for huc12 in huc12GlobalDic:
                     if huc12GlobalDic[huc12] in mappy.layers:
                         mappy.remove_layer(huc12GlobalDic[huc12])
-            dc.on_draw(SAVEBOX)
-
+        
+        #add box saving functionality to the draw control
+        dc.on_draw(SAVEBOX)
         self.map.add_control(dc)
+        
         def toggle_boundaries(self,event,action):
             '''Function that controls the buttons that allow for switching between
-            map functionalities.''' 
-            
+            map functionalities.'''            
             toggler=toggleButtons
-            if toggler.label=='State Boundary' and len(mappy.layers)==1:
-               mappy.remove_control(dc) #remove draw control. Not needed for this function
-               states=[x for x in os.listdir('IPyHIS/US-STATES') if 'geo.json' in x]
-               global geoJSONDic
-               geoJSONDic={}
-               for state in states:
-                   #read in state geojson and add it to global cache of stategeojson.
-                   f=open('IPyHIS/US-STATES/{0}'.format(state))
-                   jayson = json.loads(f.read())
-                   stateGeoJson=ipyl.GeoJSON(data=jayson,hover_style={'fillColor': 'red'})
-                   geoJSONDic[jayson['features'][0]['id']]=stateGeoJson
-                   stateGeoJson.on_click(stateInfo)
-                   mappy.add_layer(stateGeoJson)
+            if toggler.label=='State Boundary':
+                if dc in mappy.controls:
+                    mappy.remove_control(dc) #remove draw control. Not needed for this function
+                if len(mappy.layers)>1:
+                    for huc in hucGlobalDic:
+                        if hucGlobalDic[huc] in mappy.layers:
+                            mappy.remove_layer(hucGlobalDic[huc])
+                if len(mappy.layers)>52:
+                    for huc12 in huc12GlobalDic:
+                        if huc12GlobalDic[huc12] in mappy.layers:
+                            mappy.remove_layer(huc12GlobalDic[huc12])
+                states=[x for x in os.listdir('IPyHIS/US-STATES') if 'geo.json' in x]
+                if len(geoJSONDic)==0:
+                    for state in states:
+                        #read in state geojson and add it to global cache of stategeojson.                   
+                        f=open('IPyHIS/US-STATES/{0}'.format(state))
+                        jayson = json.loads(f.read())
+                        stateGeoJson=ipyl.GeoJSON(data=jayson,hover_style={'fillColor': 'red'})
+                        geoJSONDic[jayson['features'][0]['id']]=stateGeoJson
+                        stateGeoJson.on_click(GRABSTATEBOUNDS)
+                        mappy.add_layer(stateGeoJson)
+                else:
+                    for state in geoJSONDic:
+                        if geoJSONDic[state] not in mappy.layers:
+                            stateGeoJson=geoJSONDic[state]
+                            stateGeoJson.on_click(GRABSTATEBOUNDS)
+                            mappy.add_layer(stateGeoJson)
             elif toggler.label=='Polygon':
                 #remove all layers that not the original map and add the draw control.
                 if len(mappy.layers)>1:
                     for state in geoJSONDic:
-                        mappy.remove_layer(geoJSONDic[state])
-                    mappy.add_control(dc)
+                        if geoJSONDic[state] in mappy.layers:
+                            mappy.remove_layer(geoJSONDic[state])
+                    for huc in hucGlobalDic:
+                        if hucGlobalDic[huc] in mappy.layers:
+                            mappy.remove_layer(hucGlobalDic[huc])
+                    for huc12 in huc12GlobalDic:
+                        if huc12GlobalDic[huc12] in mappy.layers:
+                            mappy.remove_layer(huc12GlobalDic[huc12])
+                    if dc not in mappy.controls:
+                        mappy.add_control(dc)
             elif toggler.label=='HUC Boundary':
                 hucBounds = os.listdir('IPyHIS/hucs')
-                global hucGlobalDic
-                hucGlobalDic={}
-                global huc12GlobalDic
-                huc12GlobalDic={}
-                if len(mappy.layers)==1:
+                if dc in mappy.controls:
                     mappy.remove_control(dc)
                 else:
                     for state in geoJSONDic:
-                        mappy.remove_layer(geoJSONDic[state])
-                for huc in hucBounds:
-                    f=open('Module_HIS_Map/hucs/{0}'.format(huc))
-                    jayson=json.loads(f.read())
-                    hucGeoJson=ipyl.GeoJSON(data=jayson,hover_style={'fillColor':'red'})
-                    hucGlobalDic[jayson['features'][0]['id']]=hucGeoJson
-                hucGeoJson.on_click(hucZoom)
-                mappy.add_layer(hucGeoJson)
-                mappy.on_moveend(displayRegions)
+                        if geoJSONDic[state] in mappy.layers:
+                            mappy.remove_layer(geoJSONDic[state])
+                if len(hucGlobalDic)==0:
+                    for huc in hucBounds:
+                        f=open('IPyHIS/hucs/{0}'.format(huc))
+                        jayson=json.loads(f.read())
+                        hucGeoJson=ipyl.GeoJSON(data=jayson,hover_style={'fillColor':'red'})
+                        hucGlobalDic[jayson['features'][0]['id']]=hucGeoJson
+                        hucGeoJson.on_click(HUCZOOM)
+                        mappy.add_layer(hucGeoJson)
+                else:
+                    for huc in hucGlobalDic:
+                        if hucGlobalDic[huc] not in mappy.layers:
+                            hucGeoJson=hucGlobalDic[huc]
+                            hucGeoJson.on_click(HUCZOOM)
+                            mappy.add_layer(hucGeoJson)
+
+                mappy.on_moveend(DISPLAYREGIONS)
                     
         toggleButtons.on_msg(toggle_boundaries)
         display(toggleButtons)
         return self.map
+    
     def HISGetMetadata(self,medium,keyword,HUC12):
         # Connect to the HIS Central SOAP API
         hiscentral_wsdl = 'http://hiscentral.cuahsi.org/webservices/hiscentral.asmx?wsdl'
@@ -229,6 +269,7 @@ class Map:
         polygonshape=shape(coords1).buffer(0.0)
         result=[x for x in response.series.SeriesRecordFull if polygonshape.contains(shapely.geometry.Point([x.longitude,x.latitude]))]
         return result
+    
     def HISGetSites(self,medium,keyword):
         # Connect to the HIS Central SOAP API
         hiscentral_wsdl = 'http://hiscentral.cuahsi.org/webservices/hiscentral.asmx?wsdl'
