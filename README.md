@@ -6,5 +6,6 @@ To allow hydrologic scientists that use CUAHSI's services to access information 
 
 ## Submodules
 Map - A class that derives much of its functionality from the ipyleaflet module. However, it is NOT a subclass.
+
 Site Search - A pool of functions that search sites based on identifiers known as huc codes. Can use huc 8, huc 10 and huc 12.
 
