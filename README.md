@@ -18,9 +18,9 @@ Site Search - A pool of functions that search sites based on identifiers known a
 
 004 - The huc-12 sites do not load efficiently. Exploring possibilities of how to increase efficiency or working into the interface an live method that explains how many hucs-12s are left to load. This tool is also limited by the data rate of jupyter notebook.
 
-##Documentation
+## Documentation
 
-###Map
+### Map
 
 Map.Map()
 
@@ -43,7 +43,7 @@ Map.Map.HISGetSites(medium,keyword)
 
 Gathers site names for sites that sample the designated medium and identify with a keyword. This function calls the HIS API's GetSites() function.
 
-###site_search
+### site_search
 
 site_search.getSitesByHUC12(HUC12)
 
