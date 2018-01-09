@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 16 22:16:19 2017
 
-@author: Owner
-"""
 
 from __future__ import print_function
 import ipyleaflet as ipyl
@@ -18,7 +14,8 @@ import shapely
 from shapely.geometry import shape
 import re
 import time
-from multiprocessing import Pool
+#from IPython.display import HTML
+#from multiprocessing import Pool
 
 class Map:
     '''
@@ -115,6 +112,48 @@ class Map:
                 min_lat=min(lat)
                 print('max lat: {0}, max lon: {1}, min lat: {2}, min lon: {3}'.format(max_lat,max_lon,min_lat,min_lon))
         
+        def GRABHUCBOUNDS(event,properties,id):
+            '''
+            Saves huc-12 polygon bounding box to global variables.
+            '''
+            getHUC=id+'.geo.json'
+            with open('IPyHIS/HUC-US-1/{0}'.format(getHUC)) as f:
+                global coords1
+                coords1=json.loads(f.read())['features'][0]['geometry']
+                coords=coords1['coordinates']
+                if type(coords[0][0][0])==list:
+                    coords=list(itertools.chain(*itertools.chain(*coords)))
+                else:
+                    coords=list(itertools.chain(*coords))
+                lon=np.unique([x[0] for x in coords])
+                lat=np.unique([x[1] for x in coords])
+                global max_lat
+                global max_lon
+                global min_lat
+                global min_lon
+                max_lon=max(lon)
+                max_lat=max(lat)
+                min_lon=min(lon)
+                min_lat=min(lat)
+                print('max lat: {0}, max lon: {1}, min lat: {2}, min lon: {3}'.format(max_lat,max_lon,min_lat,min_lon))
+        
+        def ADDHUC12(huc12):
+            '''
+            Adds huc-12 polygons to the map in a multiprocessed fashion.
+            '''
+            huc12FolderName='IPyHIS/HUC-US-1/'
+            f=open(huc12FolderName+huc12)
+            readHuc12=f.read()
+            #if huc-12 is in proper json format load it, if not skip
+            try:
+                huc12json=json.loads(readHuc12)
+                huc12GeoJson=ipyl.GeoJSON(data=huc12json, hover_style={'fillColor':'red'})
+                huc12GlobalDic[huc12[:-9]]=huc12GeoJson
+                huc12GeoJson.on_click(GRABHUCBOUNDS)
+                mappy.add_layer(huc12GeoJson)
+            except:
+                pass
+
         def HUCZOOM(event,properties,id):
             '''
             Zooms in on a specified huc region, removes all the hucs and replaces 
@@ -133,18 +172,14 @@ class Map:
                 hucRegion = re.search(r'[A-Z]+_(\d+)[A-Z]?',id).group(1)
                 huc12FolderName='IPyHIS/HUC-US-1/'
                 huc12Folder=[x for x in os.listdir(huc12FolderName) if x[:2]==hucRegion]
-                for huc12 in huc12Folder:
-                    f=open(huc12FolderName+huc12)
-                    readHuc12=f.read()
-                    #if huc-12 is in proper json format load it, if not skip
-                    try:
-                        huc12json=json.loads(readHuc12)
-                        huc12GeoJson=ipyl.GeoJSON(data=huc12json, hover_style={'fillColor':'red'})
-                        huc12GlobalDic[huc12[:-9]]=huc12GeoJson
-                        mappy.add_layer(huc12GeoJson)
-                    except:
-                        pass
-        
+                for huc in huc12Folder:
+                    ADDHUC12(huc)
+                #initialize pool with workers to increase efficiency
+#                p = Pool(processes=20)
+#                p.map_async(addHUC12,huc12Folder)
+                
+
+
         def DISPLAYREGIONS(event,properties):
             '''
             A helper function that runs at the end of a move. Checks what the 
@@ -242,7 +277,7 @@ class Map:
         display(toggleButtons)
         return self.map
     
-    def HISGetMetadata(self,medium,keyword,HUC12):
+    def HISGetMetadata(self,medium,keyword):
         # Connect to the HIS Central SOAP API
         hiscentral_wsdl = 'http://hiscentral.cuahsi.org/webservices/hiscentral.asmx?wsdl'
         client = Client(hiscentral_wsdl)# Search for Sites Containing Bromide Data
@@ -292,6 +327,7 @@ class Map:
         sites = list(response)[0][1]
         result=[x for x in sites if polygonshape.contains(shapely.geometry.Point([x.Longitude,x.Latitude]))]
         return result
+
     
         
     
